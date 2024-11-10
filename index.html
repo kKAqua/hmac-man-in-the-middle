@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure TLS Message System</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f5f5f5;
+        }
+        #chat-container {
+            width: 80%;
+            max-width: 700px;
+            margin: 30px auto;
+            padding: 15px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            background-color: #fafafa;
+        }
+        .message {
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .sent {
+            background-color: #d1e7dd;
+            text-align: right;
+        }
+        .received {
+            background-color: #f8d7da;
+            text-align: left;
+        }
+        #message-input {
+            display: flex;
+        }
+        #message {
+            flex: 1;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h2 class="text-center">Secure Chat System</h2>
+        <div id="messages"></div>
+        <div id="message-input">
+            <input type="text" id="message" placeholder="Enter your message">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+        <p id="response"></p>
+    </div>
+
+    <script>
+        let socket;
+
+        function initWebSocket() {
+            socket = new WebSocket('wss://127.0.0.1:8888');
+
+            socket.onopen = function () {
+                console.log("WebSocket connection established.");
+            };
+
+            socket.onmessage = function (event) {
+                displayMessage(event.data, 'received');
+            };
+
+            socket.onerror = function (error) {
+                console.error("WebSocket Error:", error);
+                document.getElementById('response').innerText = "Connection Error!";
+            };
+
+            socket.onclose = function () {
+                console.log("WebSocket connection closed.");
+            };
+        }
+
+        async function sendMessage() {
+            const message = document.getElementById('message').value;
+            if (message.trim() === '') {
+                return;
+            }
+
+            const hmac = await generateHMAC(message);
+            const data = message + ':' + hmac;
+
+            if (socket.readyState === WebSocket.OPEN) {
+                displayMessage(message, 'sent');
+                socket.send(data);
+                document.getElementById('message').value = ''; // Clear input
+            } else {
+                console.log("WebSocket is not open.");
+                document.getElementById('response').innerText = "WebSocket is not connected.";
+            }
+        }
+
+        async function generateHMAC(message) {
+            const secret = "secret_key_for_hmac"; // Matches the key on the server side
+            const enc = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                enc.encode(secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+            const hmac = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return hmac;
+        }
+
+        function displayMessage(message, type) {
+            const messagesContainer = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', type);
+            messageElement.textContent = message;
+            messagesContainer.appendChild(messageElement);
+
+            // 自动滚动到底部
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 初始化 WebSocket 连接
+        initWebSocket();
+    </script>
+</body>
+</html>
